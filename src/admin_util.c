@@ -1,7 +1,7 @@
 // src/admin_util.c
 #include "common.h"
-#include "utils.h"  // Include utils for write_string
-#include "model.h"  // Include model for file paths
+#include "utils.h"  // --- ADDED ---
+#include "model.h"  // --- ADDED ---
 
 int main() {
     int fd_user, fd_account;
@@ -16,7 +16,11 @@ int main() {
     open(LOAN_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     open(FEEDBACK_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     open(TRANSACTION_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    open(TRANSFER_LOG_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0644); // This will now work
 
+    
+    // ... (rest of the file is unchanged) ...
+    // ... (creating users 1-8 and accounts 2 & 6) ...
     
     // --- User 1: Administrator 1 ---
     User admin1;
@@ -150,7 +154,6 @@ int main() {
     cust_account2.isActive = 1;
     write(fd_account, &cust_account2, sizeof(Account));
 
-    // UPDATED: Print message
     write_string(STDOUT_FILENO, "Customer accounts created (SB-2, SB-6)\n");
     
     close(fd_account);

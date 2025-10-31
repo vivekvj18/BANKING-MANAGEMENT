@@ -25,9 +25,9 @@
 #define LOAN_FILE "data/loans.dat"
 #define FEEDBACK_FILE "data/feedback.dat"
 #define TRANSACTION_FILE "data/transactions.dat"
+#define TRANSFER_LOG_FILE "data/transfer_log.dat" // <-- THIS WAS THE MISSING LINE
 
 // --- Data Structures ---
-
 typedef enum {
     CUSTOMER,
     EMPLOYEE,
@@ -48,9 +48,9 @@ typedef struct {
 } User;
 
 typedef struct {
-    int accountId;         // Unique ID for the account (matches ownerUserId)
-    int ownerUserId;       // ID of the user who owns this
-    char accountNumber[20]; // The string "SB-2", "SB-6" etc.
+    int accountId;
+    int ownerUserId;
+    char accountNumber[20];
     double balance;
     int isActive;
 } Account;
@@ -64,14 +64,13 @@ typedef enum {
 
 typedef struct {
     int transactionId;
-    int accountId;      // Which account this transaction belongs to
-    int userId;         // Which user performed this
+    int accountId;
+    int userId;
     TransactionType type;
     double amount;
     double newBalance;
     char otherPartyAccountNumber[20]; 
 } Transaction;
-
 
 typedef enum {
     PENDING,
@@ -83,7 +82,7 @@ typedef enum {
 typedef struct {
     int loanId;
     int userId;
-    int accountIdToDeposit; // The accountId (== userId) to put the money in
+    int accountIdToDeposit;
     double amount;
     LoanStatus status;
     int assignedToEmployeeId;
@@ -95,5 +94,21 @@ typedef struct {
     char feedbackText[256];
     int isReviewed;
 } Feedback;
+
+
+// --- ADDED: New Structs for Write-Ahead Log ---
+typedef enum {
+    LOG_START,
+    LOG_COMMIT
+} LogStatus;
+
+typedef struct {
+    long transferId;  // A unique ID for this specific transfer
+    int fromAccountId;
+    int toAccountId;
+    double amount;
+    LogStatus status;
+} TransferLog;
+// --- END ADDED ---
 
 #endif // COMMON_H

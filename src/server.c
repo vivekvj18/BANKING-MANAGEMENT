@@ -2,6 +2,7 @@
 #include "common.h"
 #include "controller.h" // For handle_client
 #include "utils.h"      // For write_string
+#include "model.h"      // --- ADDED: For recovery check ---
 
 // --- Main Server Setup (Threaded) ---
 int main() {
@@ -26,7 +27,11 @@ int main() {
         perror("listen"); exit(EXIT_FAILURE);
     }
 
-    write_string(STDOUT_FILENO, "Server listening on port 8080 (Threaded Mode)...\n");
+    // --- MODIFIED: Run recovery check before listening ---
+    write_string(STDOUT_FILENO, "Server starting... running crash recovery check...\n");
+    perform_recovery_check();
+    write_string(STDOUT_FILENO, "Recovery complete. Server listening on port 8080 (Threaded Mode)...\n");
+    // --- END MODIFIED ---
 
     while (1) {
         if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
@@ -36,7 +41,6 @@ int main() {
         int* client_sock_ptr = (int*)malloc(sizeof(int));
         *client_sock_ptr = new_socket;
 
-        // We now pass the handle_client function from our controller
         if (pthread_create(&thread_id, NULL, handle_client, (void*)client_sock_ptr) < 0) {
             perror("pthread_create failed");
             close(new_socket);

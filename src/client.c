@@ -1,5 +1,6 @@
 // src/client.c
 #include "common.h"
+#include "utils.h"  // --- ADDED: To find write_string ---
 
 int main() {
     int sock = 0;
