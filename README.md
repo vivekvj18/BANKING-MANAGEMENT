@@ -88,18 +88,60 @@ This project was built to meet strict requirements for data integrity.
     * Submit feedback.
 * **Shared (`shared.c`):**
     * All roles can view their personal details and change their password.
-
-
-## 🛠️ How to Compile and Run
-
-### 1. Compilation
-Compile all modules and link them into three final executables.
+---
+## 📁 Project Structure
 
 ```bash
-# 1. Create directories
-mkdir -p obj data
+BankingManagementSystem/
+├── data/
+│   ├── accounts.dat       # User account details
+│   ├── feedback.dat       # Customer feedback records
+│   ├── loans.dat          # Loan application records
+│   ├── transactions.dat   # Transaction history
+│   ├── transfer_log.dat   # Write-Ahead Log (WAL) for Atomicity
+│   └── users.dat          # User login and profile data
+├── include/               # Header files (.h) defining interfaces and structures
+│   ├── admin.h
+│   ├── common.h
+│   ├── controller.h
+│   ├── customer.h
+│   ├── employee.h
+│   ├── manager.h
+│   ├── model.h
+│   ├── shared.h
+│   └── utils.h
+├── obj/                   # Compiled object files (.o) - (Not tracked by Git)
+├── src/                   # Source files (.c) implementing the logic
+│   ├── admin.c
+│   ├── admin_util.c       # Utility to create initial users/accounts
+│   ├── client.c           # Client program
+│   ├── controller.c
+│   ├── customer.c
+│   ├── employee.c
+│   ├── manager.c
+│   ├── model.c            # Data storage and retrieval logic
+│   ├── server.c           # Main server logic (connection handling, threads)
+│   ├── shared.c
+│   └── utils.c            # Generic helper functions
+├── .gitignore
+├── Makefile               # For automating compilation
+├── client                 # Compiled Executable
+├── init_data              # Compiled Executable
+├── server                 # Compiled Executable
+└── UML DIAGRAM.pdf
 
-# 2. Compile all .c files into .o files
+```
+
+# 🛠️ How to Compile and Run
+
+## 1. Create directories
+
+```bash
+mkdir -p obj data
+```
+
+## 2. Compile all .c files into .o files
+```bash
 gcc -Iinclude -Wall -c src/utils.c       -o obj/utils.o
 gcc -Iinclude -Wall -c src/model.c       -o obj/model.o
 gcc -Iinclude -Wall -c src/shared.c      -o obj/shared.o
@@ -111,8 +153,29 @@ gcc -Iinclude -Wall -c src/controller.c  -o obj/controller.o
 gcc -Iinclude -Wall -c src/server.c      -o obj/server.o
 gcc -Iinclude -Wall -c src/client.c      -o obj/client.o
 gcc -Iinclude -Wall -c src/admin_util.c  -o obj/admin_util.o
+```
 
-# 3. Link the executables
+## 3. Link the executables
+```
 gcc obj/admin_util.o obj/model.o obj/utils.o -o init_data
 gcc obj/server.o obj/controller.o obj/admin.o obj/manager.o obj/employee.o obj/customer.o obj/shared.o obj/model.o obj/utils.o -o server -lpthread
 gcc obj/client.o obj/utils.o -o client
+```
+
+## Clean Data
+```
+rm data/*.dat
+```
+## Initialize Data (Run Once)
+```
+./init_data
+```
+## Start Server (Terminal 1)
+```
+./server
+```
+## Run Client (Terminal 2, 3, etc.)
+```
+./client
+```
+
