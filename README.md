@@ -19,7 +19,7 @@ This project is a comprehensive demonstration of core system software concepts:
 
 This project follows a 3-tier "separation of concerns" model. The logic is separated into a Network layer, a routing/session layer, distinct role-based controllers, and a data-access layer.
 
-*(This is the perfect place to insert the `blueprint.png` diagram you generated)*
+![System Architecture Blueprint](blueprint.svg)
 
 The code is organized as follows:
 * **`server.c` (Network Layer):**
