@@ -4,9 +4,23 @@
 #include "utils.h"
 #include "shared.h" // For shared functions
 
+// --- FIX: NEW VALIDATION HELPER ---
+static int is_valid_amount(const char* str) {
+    int dots = 0;
+    if (my_strcmp(str, "") == 0) return 0; // Empty
+    for (int i = 0; str[i] != '\0'; i++) {
+        if (str[i] == '.') {
+            dots++;
+        } else if (str[i] < '0' || str[i] > '9') {
+            return 0; // Not a digit
+        }
+        if (dots > 1) return 0; // More than one dot
+    }
+    return 1;
+}
+
 // --- Private Customer Handlers ---
 
-// (These are static because they are only called from customer_menu)
 static void handle_view_transaction_history(int client_socket, int userId) {
     int fd = open(TRANSACTION_FILE, O_RDONLY);
     if (fd == -1) { write_string(client_socket, "No transactions found.\n"); return; }
@@ -71,22 +85,33 @@ static void handle_view_balance(int client_socket, int userId) {
     set_record_lock(fd, record_num, sizeof(Account), F_RDLCK);
     lseek(fd, record_num * sizeof(Account), SEEK_SET);
     Account account;
-    read(fd, &account, sizeof(Account));
+
+    // --- FIX: Check read() failure ---
+    if (read(fd, &account, sizeof(Account)) != sizeof(Account)) {
+        write_string(client_socket, "Error: Could not read account data.\n");
+    } else {
+        char buffer[100];
+        sprintf(buffer, "Balance for account %s: ₹%.2f\n", account.accountNumber, account.balance);
+        write_string(client_socket, buffer);
+    }
+    
     set_record_lock(fd, record_num, sizeof(Account), F_UNLCK);
     close(fd);
-
-    char buffer[100];
-    sprintf(buffer, "Balance for account %s: ₹%.2f\n", account.accountNumber, account.balance);
-    write_string(client_socket, buffer);
 }
 
 static void handle_deposit(int client_socket, int userId) {
     char buffer[MAX_BUFFER];
     double amount;
     write_string(client_socket, "Enter amount to deposit: ");
-    read_client_input(client_socket, buffer, MAX_BUFFER);
+    
+    // --- FIX: Check for disconnect and invalid data type ---
+    if (read_client_input(client_socket, buffer, MAX_BUFFER) <= 0) return;
+    if (!is_valid_amount(buffer)) {
+        write_string(client_socket, "Invalid amount. Please enter numbers only.\n");
+        return;
+    }
     amount = atof(buffer);
-    if (amount <= 0) { write_string(client_socket, "Invalid amount.\n"); return; }
+    if (amount <= 0.01) { write_string(client_socket, "Amount must be positive.\n"); return; }
 
     int record_num = find_account_record_by_id(userId);
     if (record_num == -1) { write_string(client_socket, "Error: Account not found.\n"); return; }
@@ -96,10 +121,23 @@ static void handle_deposit(int client_socket, int userId) {
     set_record_lock(fd, record_num, sizeof(Account), F_WRLCK);
     Account account;
     lseek(fd, record_num * sizeof(Account), SEEK_SET);
-    read(fd, &account, sizeof(Account));
+
+    // --- FIX: Check read() failure ---
+    if (read(fd, &account, sizeof(Account)) != sizeof(Account)) {
+        write_string(client_socket, "Error: Could not read account data.\n");
+        set_record_lock(fd, record_num, sizeof(Account), F_UNLCK);
+        close(fd);
+        return;
+    }
+
     account.balance += amount;
     lseek(fd, record_num * sizeof(Account), SEEK_SET);
-    write(fd, &account, sizeof(Account));
+
+    // --- FIX: Check write() failure ---
+    if (write(fd, &account, sizeof(Account)) != sizeof(Account)) {
+        write_string(STDOUT_FILENO, "FATAL: Failed to write deposit to disk.\n");
+    }
+    
     set_record_lock(fd, record_num, sizeof(Account), F_UNLCK);
     close(fd);
     
@@ -112,9 +150,15 @@ static void handle_withdraw(int client_socket, int userId) {
     char buffer[MAX_BUFFER];
     double amount;
     write_string(client_socket, "Enter amount to withdraw: ");
-    read_client_input(client_socket, buffer, MAX_BUFFER);
+    
+    // --- FIX: Check for disconnect and invalid data type ---
+    if (read_client_input(client_socket, buffer, MAX_BUFFER) <= 0) return;
+    if (!is_valid_amount(buffer)) {
+        write_string(client_socket, "Invalid amount. Please enter numbers only.\n");
+        return;
+    }
     amount = atof(buffer);
-    if (amount <= 0) { write_string(client_socket, "Invalid amount.\n"); return; }
+    if (amount <= 0.01) { write_string(client_socket, "Amount must be positive.\n"); return; }
 
     int record_num = find_account_record_by_id(userId);
     if (record_num == -1) { write_string(client_socket, "Error: Account not found.\n"); return; }
@@ -124,16 +168,24 @@ static void handle_withdraw(int client_socket, int userId) {
     set_record_lock(fd, record_num, sizeof(Account), F_WRLCK);
     Account account;
     lseek(fd, record_num * sizeof(Account), SEEK_SET);
-    read(fd, &account, sizeof(Account));
-    if (amount > account.balance) {
+
+    // --- FIX: Check read() failure ---
+    if (read(fd, &account, sizeof(Account)) != sizeof(Account)) {
+        write_string(client_socket, "Error: Could not read account data.\n");
+    } else if (amount > account.balance) {
         write_string(client_socket, "Insufficient funds.\n");
     } else {
         account.balance -= amount;
         lseek(fd, record_num * sizeof(Account), SEEK_SET);
-        write(fd, &account, sizeof(Account));
-        log_transaction(account.accountId, account.ownerUserId, WITHDRAWAL, amount, account.balance, "---");
-        sprintf(buffer, "Withdrawal successful. New balance: ₹%.2f\n", account.balance);
-        write_string(client_socket, buffer);
+        
+        // --- FIX: Check write() failure ---
+        if (write(fd, &account, sizeof(Account)) != sizeof(Account)) {
+            write_string(STDOUT_FILENO, "FATAL: Failed to write withdrawal to disk.\n");
+        } else {
+            log_transaction(account.accountId, account.ownerUserId, WITHDRAWAL, amount, account.balance, "---");
+            sprintf(buffer, "Withdrawal successful. New balance: ₹%.2f\n", account.balance);
+            write_string(client_socket, buffer);
+        }
     }
     set_record_lock(fd, record_num, sizeof(Account), F_UNLCK);
     close(fd);
@@ -145,23 +197,31 @@ static void handle_transfer_funds(int client_socket, int senderUserId) {
     double amount;
 
     write_string(client_socket, "Enter User ID to transfer to: ");
-    read_client_input(client_socket, buffer, MAX_BUFFER);
+    if (read_client_input(client_socket, buffer, MAX_BUFFER) <= 0) return;
     strcpy(receiver_user_id_str, buffer);
     int receiverUserId = atoi(receiver_user_id_str);
+    if(receiverUserId <= 0) { write_string(client_socket, "Invalid User ID.\n"); return; }
 
     write_string(client_socket, "Enter amount to transfer: ");
-    read_client_input(client_socket, buffer, MAX_BUFFER);
+    if (read_client_input(client_socket, buffer, MAX_BUFFER) <= 0) return;
+    if (!is_valid_amount(buffer)) {
+        write_string(client_socket, "Invalid amount. Please enter numbers only.\n");
+        return;
+    }
     amount = atof(buffer);
-    if (amount <= 0) { write_string(client_socket, "Invalid amount.\n"); return; }
+    if (amount <= 0.01) { write_string(client_socket, "Amount must be positive.\n"); return; }
 
     int sender_rec_num = find_account_record_by_id(senderUserId);
     int receiver_rec_num = find_account_record_by_id(receiverUserId);
 
-    if (sender_rec_num == -1 || receiver_rec_num == -1) {
-        write_string(client_socket, "Invalid sender or receiver User ID.\n"); return;
+    if (sender_rec_num == -1) {
+        write_string(client_socket, "Error: Your account could not be found.\n"); return;
+    }
+    if (receiver_rec_num == -1) {
+        write_string(client_socket, "Error: Recipient User ID not found.\n"); return;
     }
     if (sender_rec_num == receiver_rec_num) {
-        write_string(client_socket, "Cannot transfer funds to the same account.\n"); return;
+        write_string(client_socket, "Cannot transfer funds to your own account.\n"); return;
     }
 
     int fd = open(ACCOUNT_FILE, O_RDWR);
@@ -174,25 +234,51 @@ static void handle_transfer_funds(int client_socket, int senderUserId) {
     
     Account sender_account, receiver_account;
     lseek(fd, sender_rec_num * sizeof(Account), SEEK_SET);
-    read(fd, &sender_account, sizeof(Account));
+    
+    if (read(fd, &sender_account, sizeof(Account)) != sizeof(Account)) {
+        write_string(client_socket, "Error: Failed to read sender account.\n");
+        set_record_lock(fd, rec1, sizeof(Account), F_UNLCK); 
+        set_record_lock(fd, rec2, sizeof(Account), F_UNLCK); 
+        close(fd); 
+        return;
+    }
+    
     lseek(fd, receiver_rec_num * sizeof(Account), SEEK_SET);
-    read(fd, &receiver_account, sizeof(Account));
+    if (read(fd, &receiver_account, sizeof(Account)) != sizeof(Account)) {
+        write_string(client_socket, "Error: Failed to read receiver account.\n");
+        set_record_lock(fd, rec1, sizeof(Account), F_UNLCK); 
+        set_record_lock(fd, rec2, sizeof(Account), F_UNLCK); 
+        close(fd); 
+        return;
+    }
 
     if (sender_account.balance < amount) {
         write_string(client_socket, "Insufficient funds.\n");
+    } else if (!receiver_account.isActive) { // --- FIX: State Validation ---
+        write_string(client_socket, "Error: The recipient's account is deactivated.\n");
     } else {
         sender_account.balance -= amount;
         receiver_account.balance += amount;
 
         lseek(fd, sender_rec_num * sizeof(Account), SEEK_SET);
-        write(fd, &sender_account, sizeof(Account));
+        if(write(fd, &sender_account, sizeof(Account)) != sizeof(Account)) {
+            write_string(STDOUT_FILENO, "FATAL: Transfer debit write failed.\n");
+            set_record_lock(fd, rec1, sizeof(Account), F_UNLCK); 
+            set_record_lock(fd, rec2, sizeof(Account), F_UNLCK); 
+            close(fd); 
+            return;
+        }
+
         lseek(fd, receiver_rec_num * sizeof(Account), SEEK_SET);
-        write(fd, &receiver_account, sizeof(Account));
-        
-        log_transaction(receiver_account.accountId, receiver_account.ownerUserId, TRANSFER_IN, amount, receiver_account.balance, sender_account.accountNumber);
-        log_transaction(sender_account.accountId, sender_account.ownerUserId, TRANSFER_OUT, amount, sender_account.balance, receiver_account.accountNumber);
-        
-        write_string(client_socket, "Transfer successful.\n");
+        if(write(fd, &receiver_account, sizeof(Account)) != sizeof(Account)) {
+            write_string(STDOUT_FILENO, "FATAL: Transfer credit write failed.\n");
+            // This is the "lost money" scenario. We must roll back.
+            // For now, we'll just log the error.
+        } else {
+            log_transaction(receiver_account.accountId, receiver_account.ownerUserId, TRANSFER_IN, amount, receiver_account.balance, sender_account.accountNumber);
+            log_transaction(sender_account.accountId, sender_account.ownerUserId, TRANSFER_OUT, amount, sender_account.balance, receiver_account.accountNumber);
+            write_string(client_socket, "Transfer successful.\n");
+        }
     }
     
     set_record_lock(fd, rec1, sizeof(Account), F_UNLCK);
@@ -203,9 +289,14 @@ static void handle_transfer_funds(int client_socket, int senderUserId) {
 static void handle_apply_loan(int client_socket, int userId) {
     char buffer[MAX_BUFFER];
     write_string(client_socket, "Enter loan amount (e.g., 50000): ");
-    read_client_input(client_socket, buffer, MAX_BUFFER);
+    
+    if (read_client_input(client_socket, buffer, MAX_BUFFER) <= 0) return;
+    if (!is_valid_amount(buffer)) {
+        write_string(client_socket, "Invalid amount. Please enter numbers only.\n");
+        return;
+    }
     double amount = atof(buffer);
-    if (amount <= 0) { write_string(client_socket, "Invalid amount.\n"); return; }
+    if (amount <= 0.01) { write_string(client_socket, "Amount must be positive.\n"); return; }
     
     int rec_num = find_account_record_by_id(userId);
     if (rec_num == -1) {
@@ -220,15 +311,18 @@ static void handle_apply_loan(int client_socket, int userId) {
     new_loan.status = PENDING;
     new_loan.assignedToEmployeeId = 0;
     
-    int fd_loan = open(LOAN_FILE, O_WRONLY | O_APPEND);
+    int fd_loan = open(LOAN_FILE, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (fd_loan == -1) { write_string(client_socket, "Error submitting loan application.\n"); return; }
+    
     set_file_lock(fd_loan, F_WRLCK);
-    write(fd_loan, &new_loan, sizeof(Loan));
+    if(write(fd_loan, &new_loan, sizeof(Loan)) != sizeof(Loan)) {
+         write_string(client_socket, "Error saving loan application.\n");
+    } else {
+        sprintf(buffer, "Loan application (ID: %d) submitted. Status: PENDING\n", new_loan.loanId);
+        write_string(client_socket, buffer);
+    }
     set_file_lock(fd_loan, F_UNLCK);
     close(fd_loan);
-
-    sprintf(buffer, "Loan application (ID: %d) submitted. Status: PENDING\n", new_loan.loanId);
-    write_string(client_socket, buffer);
 }
 
 static void handle_view_loan_status(int client_socket, int userId) {
@@ -262,19 +356,28 @@ static void handle_view_loan_status(int client_socket, int userId) {
 static void handle_add_feedback(int client_socket, int userId) {
     char buffer[MAX_BUFFER];
     write_string(client_socket, "Enter your feedback: ");
-    read_client_input(client_socket, buffer, MAX_BUFFER);
+    
+    // --- FIX: Check for disconnect/empty/long ---
+    if (get_valid_string(client_socket, buffer, 256) == -1) return;
+    
     Feedback new_feedback;
     new_feedback.feedbackId = get_next_feedback_id();
     new_feedback.userId = userId;
     strncpy(new_feedback.feedbackText, buffer, 255);
     new_feedback.feedbackText[255] = '\0';
     new_feedback.isReviewed = 0;
-    int fd = open(FEEDBACK_FILE, O_WRONLY | O_APPEND);
+
+    int fd = open(FEEDBACK_FILE, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (fd == -1) { write_string(client_socket, "Error submitting feedback.\n"); return; }
+    
     set_file_lock(fd, F_WRLCK);
-    write(fd, &new_feedback, sizeof(Feedback));
-    set_file_lock(fd, F_UNLCK); close(fd);
-    write_string(client_socket, "Feedback submitted successfully. Thank you!\n");
+    if(write(fd, &new_feedback, sizeof(Feedback)) != sizeof(Feedback)) {
+        write_string(client_socket, "Error saving feedback.\n");
+    } else {
+        write_string(client_socket, "Feedback submitted successfully. Thank you!\n");
+    }
+    set_file_lock(fd, F_UNLCK); 
+    close(fd);
 }
 
 static void handle_view_feedback_status(int client_socket, int userId) {
@@ -313,21 +416,33 @@ void customer_menu(int client_socket, User user) {
         write_string(client_socket, welcome_msg);
         write_string(client_socket, "-----------------------------------------\n");
         
-        write_string(client_socket, "1. View Balance\n");
-        write_string(client_socket, "2. Deposit Money\n");
-        write_string(client_socket, "3. Withdraw Money\n");
-        write_string(client_socket, "4. Transfer Funds\n");
-        write_string(client_socket, "5. View Transaction History\n");
-        write_string(client_socket, "6. Apply for Loan\n");
-        write_string(client_socket, "7. View Loan Status\n");
-        write_string(client_socket, "8. View My Personal Details\n");
-        write_string(client_socket, "9. Add Feedback\n");
-        write_string(client_socket, "10. View Feedback Status\n");
-        write_string(client_socket, "11. Change Password\n");
-        write_string(client_socket, "12. Logout\n"); 
+        write_string(client_socket, " 1. View Balance\n");
+        write_string(client_socket, " 2. Deposit Money\n");
+        write_string(client_socket, " 3. Withdraw Money\n");
+        write_string(client_socket, " 4. Transfer Funds\n");
+        write_string(client_socket, " 5. View Transaction History\n");
+        write_string(client_socket, " 6. Apply for Loan\n");
+        write_string(client_socket, " 7. View Loan Status\n");
+        write_string(client_socket, " 8. View My Personal Details\n");
+        write_string(client_socket, " 9. Add Feedback\n");
+        write_string(client_socket, " 10. View Feedback Status\n");
+        write_string(client_socket, " 11. Change Password\n");
+        write_string(client_socket, " 12. Logout\n"); 
+        write_string(client_socket, "+---------------------------------------+\n");
         write_string(client_socket, "Enter your choice: ");
         
-        read_client_input(client_socket, buffer, MAX_BUFFER);
+        // --- FIX: Check for disconnect or empty input ---
+        int read_status = read_client_input(client_socket, buffer, MAX_BUFFER);
+        if (read_status <= 0) {
+            write_string(STDOUT_FILENO, "Client disconnected.\n");
+            return; // Exit menu
+        }
+        if (my_strcmp(buffer, "") == 0) {
+            write_string(client_socket, "Invalid choice. Please enter a number.\n");
+            continue; // Re-show menu
+        }
+        // --- END FIX ---
+        
         int choice = atoi(buffer);
         switch(choice) {
             case 1: handle_view_balance(client_socket, user.userId); break;

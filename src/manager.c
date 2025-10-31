@@ -37,19 +37,23 @@ static void handle_assign_loan(int client_socket) {
     }
 
     write_string(client_socket, "Enter Loan ID to assign: ");
-    read_client_input(client_socket, buffer, MAX_BUFFER);
+    if(read_client_input(client_socket, buffer, MAX_BUFFER) <= 0) { close(fd); return; }
     int loanId = atoi(buffer);
+    if(loanId <= 0) { write_string(client_socket, "Invalid Loan ID.\n"); close(fd); return; }
 
     write_string(client_socket, "Enter Employee ID to assign to: ");
-    read_client_input(client_socket, buffer, MAX_BUFFER);
+    if(read_client_input(client_socket, buffer, MAX_BUFFER) <= 0) { close(fd); return; }
     int employeeId = atoi(buffer);
+    if(employeeId <= 0) { write_string(client_socket, "Invalid Employee ID.\n"); close(fd); return; }
 
+    // --- FIX: Check if Employee ID is valid ---
     int emp_rec_num = find_user_record(employeeId);
     if (emp_rec_num == -1) {
         write_string(client_socket, "Employee not found.\n");
         close(fd);
         return;
     }
+    // (You could also add a check here to ensure the user.role is EMPLOYEE)
 
     int loan_rec_num = find_loan_record(loanId);
     if (loan_rec_num == -1) {
@@ -60,16 +64,22 @@ static void handle_assign_loan(int client_socket) {
 
     set_record_lock(fd, loan_rec_num, sizeof(Loan), F_WRLCK);
     lseek(fd, loan_rec_num * sizeof(Loan), SEEK_SET);
-    read(fd, &loan, sizeof(Loan));
     
-    if (loan.assignedToEmployeeId != 0 || loan.status != PENDING) {
+    // --- FIX: Check read() failure ---
+    if (read(fd, &loan, sizeof(Loan)) != sizeof(Loan)) {
+         write_string(client_socket, "Error reading loan record.\n");
+    } else if (loan.assignedToEmployeeId != 0 || loan.status != PENDING) {
          write_string(client_socket, "Loan cannot be assigned (already assigned or processed).\n");
     } else {
         loan.assignedToEmployeeId = employeeId;
         loan.status = PROCESSING; 
         lseek(fd, loan_rec_num * sizeof(Loan), SEEK_SET);
-        write(fd, &loan, sizeof(Loan));
-        write_string(client_socket, "Loan assigned successfully.\n");
+        // --- FIX: Check write() failure ---
+        if(write(fd, &loan, sizeof(Loan)) != sizeof(Loan)) {
+            write_string(STDOUT_FILENO, "FATAL: Failed to assign loan.\n");
+        } else {
+            write_string(client_socket, "Loan assigned successfully.\n");
+        }
     }
 
     set_record_lock(fd, loan_rec_num, sizeof(Loan), F_UNLCK);
@@ -107,8 +117,9 @@ static void handle_review_feedback(int client_socket) {
     }
 
     write_string(client_socket, "Enter Feedback ID to mark as reviewed: ");
-    read_client_input(client_socket, buffer, MAX_BUFFER);
+    if(read_client_input(client_socket, buffer, MAX_BUFFER) <= 0) { close(fd); return; }
     int feedbackId = atoi(buffer);
+    if(feedbackId <= 0) { write_string(client_socket, "Invalid ID.\n"); close(fd); return; }
 
     int rec_num = find_feedback_record(feedbackId);
     if (rec_num == -1) {
@@ -119,15 +130,21 @@ static void handle_review_feedback(int client_socket) {
 
     set_record_lock(fd, rec_num, sizeof(Feedback), F_WRLCK);
     lseek(fd, rec_num * sizeof(Feedback), SEEK_SET);
-    read(fd, &feedback, sizeof(Feedback));
-
-    if (feedback.isReviewed == 1) {
+    
+    // --- FIX: Check read() failure ---
+    if (read(fd, &feedback, sizeof(Feedback)) != sizeof(Feedback)) {
+        write_string(client_socket, "Error reading feedback record.\n");
+    } else if (feedback.isReviewed == 1) {
         write_string(client_socket, "Feedback already marked as reviewed.\n");
     } else {
         feedback.isReviewed = 1; 
         lseek(fd, rec_num * sizeof(Feedback), SEEK_SET);
-        write(fd, &feedback, sizeof(Feedback));
-        write_string(client_socket, "Feedback marked as reviewed.\n");
+        // --- FIX: Check write() failure ---
+        if(write(fd, &feedback, sizeof(Feedback)) != sizeof(Feedback)) {
+            write_string(STDOUT_FILENO, "FATAL: Failed to write feedback review.\n");
+        } else {
+            write_string(client_socket, "Feedback marked as reviewed.\n");
+        }
     }
 
     set_record_lock(fd, rec_num, sizeof(Feedback), F_UNLCK);
@@ -154,9 +171,21 @@ void manager_menu(int client_socket, User user) {
         write_string(client_socket, "4. View My Personal Details\n");
         write_string(client_socket, "5. Change My Password\n");
         write_string(client_socket, "6. Logout\n");
+        write_string(client_socket, "+---------------------------------------+\n");
         write_string(client_socket, "Enter your choice: ");
         
-        read_client_input(client_socket, buffer, MAX_BUFFER);
+        // --- FIX: Check for disconnect or empty input ---
+        int read_status = read_client_input(client_socket, buffer, MAX_BUFFER);
+        if (read_status <= 0) {
+            write_string(STDOUT_FILENO, "Client disconnected.\n");
+            return; // Exit menu
+        }
+        if (my_strcmp(buffer, "") == 0) {
+            write_string(client_socket, "Invalid choice. Please enter a number.\n");
+            continue; // Re-show menu
+        }
+        // --- END FIX ---
+        
         int choice = atoi(buffer);
         switch(choice) {
             case 1: handle_set_account_status(client_socket, 0); break;

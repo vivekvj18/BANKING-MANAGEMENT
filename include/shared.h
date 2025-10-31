@@ -4,6 +4,11 @@
 
 #include "common.h"
 
+// --- FIX: Add prototypes for the validation helpers ---
+int get_valid_string(int client_socket, char* dest, int max_len);
+int get_valid_email(int client_socket, char* dest, int max_len);
+// --- END FIX ---
+
 // --- Shared Handler Functions ---
 void handle_view_my_details(int client_socket, User user);
 void handle_change_password(int client_socket, int userId);

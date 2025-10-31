@@ -19,8 +19,8 @@ int my_strcmp(const char* s1, const char* s2) {
     return *(const unsigned char*)s1 - *(const unsigned char*)s2;
 }
 
-// Moved from server.c
-void read_client_input(int client_socket, char* buffer, int size) {
+// --- FIX: Returns the read_size to detect disconnects (0) or errors (-1)
+int read_client_input(int client_socket, char* buffer, int size) {
     int read_size = read(client_socket, buffer, size - 1);
     if (read_size > 0) {
         buffer[read_size] = '\0';
@@ -28,10 +28,12 @@ void read_client_input(int client_socket, char* buffer, int size) {
             buffer[read_size - 1] = '\0';
         }
     }
+    // Return the status of the read operation
+    return read_size;
 }
 
 // --- Locking Functions ---
-
+// (Unchanged)
 int set_file_lock(int fd, int lock_type) {
     struct flock fl;
     fl.l_type = lock_type;

@@ -23,14 +23,29 @@ void admin_menu(int client_socket, User user) {
         write_string(client_socket, "4. View My Personal Details\n");
         write_string(client_socket, "5. Change My Password\n");
         write_string(client_socket, "6. Logout\n");
+        write_string(client_socket, "+---------------------------------------+\n");
         write_string(client_socket, "Enter your choice: ");
         
-        read_client_input(client_socket, buffer, MAX_BUFFER);
+        // --- FIX: Check for disconnect or empty input ---
+        int read_status = read_client_input(client_socket, buffer, MAX_BUFFER);
+        if (read_status <= 0) {
+            write_string(STDOUT_FILENO, "Client disconnected.\n");
+            return; // Exit menu
+        }
+        if (my_strcmp(buffer, "") == 0) {
+            write_string(client_socket, "Invalid choice. Please enter a number.\n");
+            continue; // Re-show menu
+        }
+        // --- END FIX ---
+        
         int choice = atoi(buffer);
         switch(choice) {
             case 1: 
                 write_string(client_socket, "Enter role (0=CUST, 1=EMP, 2=MAN): ");
-                read_client_input(client_socket, buffer, MAX_BUFFER);
+                // --- FIX: Add check for role input ---
+                if (read_client_input(client_socket, buffer, MAX_BUFFER) <= 0) break;
+                if(my_strcmp(buffer, "") == 0) continue;
+                
                 int role = atoi(buffer);
                 if (role >= 0 && role <= 2) handle_add_user(client_socket, (UserRole)role);
                 else write_string(client_socket, "Invalid role.\n");

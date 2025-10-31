@@ -6,31 +6,25 @@
 
 // --- Private Employee Handlers ---
 
+// --- FIX: This is duplicated from customer.c, but required by this module ---
 static void handle_view_customer_transactions(int client_socket) {
     char buffer[MAX_BUFFER];
     write_string(client_socket, "Enter Customer User ID: ");
-    read_client_input(client_socket, buffer, MAX_BUFFER);
+    if(read_client_input(client_socket, buffer, MAX_BUFFER) <= 0) return;
     
-    int rec_num = find_account_record_by_id(atoi(buffer));
+    int user_id = atoi(buffer);
+    if(user_id <= 0) { write_string(client_socket, "Invalid User ID.\n"); return; }
+
+    int rec_num = find_account_record_by_id(user_id);
     if (rec_num == -1) {
         write_string(client_socket, "Account not found for that User ID.\n"); return;
     }
     
-    int fd = open(ACCOUNT_FILE, O_RDONLY);
-    set_record_lock(fd, rec_num, sizeof(Account), F_RDLCK);
-    lseek(fd, rec_num * sizeof(Account), SEEK_SET);
-    Account account;
-    read(fd, &account, sizeof(Account));
-    set_record_lock(fd, rec_num, sizeof(Account), F_UNLCK);
-    close(fd);
-    
-    // This function is in customer.c, we can't call it.
-    // We must duplicate the logic.
-    // In a future step, this could also be moved to shared.c
-    int txn_fd = open(TRANSACTION_FILE, O_RDONLY);
-    if (txn_fd == -1) { write_string(client_socket, "No transactions found.\n"); return; }
+    // --- Start of duplicated logic ---
+    int fd = open(TRANSACTION_FILE, O_RDONLY);
+    if (fd == -1) { write_string(client_socket, "No transactions found.\n"); return; }
 
-    set_file_lock(txn_fd, F_RDLCK);
+    set_file_lock(fd, F_RDLCK);
     Transaction txn;
     int found = 0;
     
@@ -40,40 +34,76 @@ static void handle_view_customer_transactions(int client_socket) {
     write_string(client_socket, buffer);
     write_string(client_socket, "--------------------------------------------------------------------------\n");
 
-    while (read(txn_fd, &txn, sizeof(Transaction)) == sizeof(Transaction)) {
-        if (txn.accountId == account.accountId) { 
+    while (read(fd, &txn, sizeof(Transaction)) == sizeof(Transaction)) {
+        if (txn.accountId == user_id) { 
             found = 1;
             char type_str[16], other_user_str[20], amount_str[16], balance_str[16];
-            // (Same switch case as in customer.c)
-            // ... (omitted for brevity, but you would paste it here) ...
-            sprintf(buffer, "TXN: %d, Type: %d, Amt: %.2f\n", txn.transactionId, txn.type, txn.amount);
+            switch(txn.type) {
+                case DEPOSIT: 
+                    strcpy(type_str, "CREDITED"); 
+                    strcpy(other_user_str, "---");
+                    sprintf(amount_str, "₹%.2f", txn.amount);
+                    break;
+                case WITHDRAWAL: 
+                    strcpy(type_str, "DEBITED");
+                    strcpy(other_user_str, "---");
+                    sprintf(amount_str, "₹%.2f", txn.amount);
+                    break;
+                case TRANSFER_OUT: 
+                    strcpy(type_str, "DEBITED");
+                    sprintf(other_user_str, "%s", txn.otherPartyAccountNumber);
+                    sprintf(amount_str, "₹%.2f", txn.amount);
+                    break;
+                case TRANSFER_IN: 
+                    strcpy(type_str, "CREDITED"); 
+                    sprintf(other_user_str, "%s", txn.otherPartyAccountNumber);
+                    sprintf(amount_str, "₹%.2f", txn.amount);
+                    break;
+                default: 
+                    strcpy(type_str, "UNKNOWN");
+                    strcpy(other_user_str, "---");
+                    sprintf(amount_str, "₹%.2f", txn.amount);
+            }
+            sprintf(balance_str, "₹%.2f", txn.newBalance);
+            sprintf(buffer, "%-7d | %-15s | %-12s | %-15s | %-15s\n",
+                txn.transactionId, type_str, other_user_str, amount_str, balance_str);
             write_string(client_socket, buffer);
         }
     }
-    set_file_lock(txn_fd, F_UNLCK); close(txn_fd);
+    set_file_lock(fd, F_UNLCK); close(fd);
     if (!found) { write_string(client_socket, "No transactions found for this account.\n"); }
+    // --- End of duplicated logic ---
 }
 
 static void handle_process_loan(int client_socket, int employeeId) {
     char buffer[MAX_BUFFER];
     write_string(client_socket, "Enter Loan ID to process: ");
-    read_client_input(client_socket, buffer, MAX_BUFFER);
+    if(read_client_input(client_socket, buffer, MAX_BUFFER) <= 0) return;
     int loanId = atoi(buffer);
+    if(loanId <= 0) { write_string(client_socket, "Invalid Loan ID.\n"); return; }
+    
     int rec_num = find_loan_record(loanId);
     if (rec_num == -1) { write_string(client_socket, "Loan ID not found.\n"); return; }
+    
     int fd = open(LOAN_FILE, O_RDWR);
     if (fd == -1) { write_string(client_socket, "Error accessing loan data.\n"); return; }
+    
     set_record_lock(fd, rec_num, sizeof(Loan), F_WRLCK);
     lseek(fd, rec_num * sizeof(Loan), SEEK_SET);
     Loan loan;
-    read(fd, &loan, sizeof(Loan));
-    if (loan.assignedToEmployeeId != employeeId) {
+
+    // --- FIX: Check read() failure ---
+    if (read(fd, &loan, sizeof(Loan)) != sizeof(Loan)) {
+        write_string(client_socket, "Error reading loan data.\n");
+    } else if (loan.assignedToEmployeeId != employeeId) {
         write_string(client_socket, "This loan is not assigned to you.\n");
     } else if (loan.status != PENDING && loan.status != PROCESSING) {
         write_string(client_socket, "This loan has already been processed.\n");
     } else {
         write_string(client_socket, "Choose action: 1 = Approve, 2 = Reject: ");
-        read_client_input(client_socket, buffer, MAX_BUFFER);
+        if(read_client_input(client_socket, buffer, MAX_BUFFER) <= 0) {
+            set_record_lock(fd, rec_num, sizeof(Loan), F_UNLCK); close(fd); return;
+        }
         int choice = atoi(buffer);
         if (choice == 1) {
             loan.status = APPROVED;
@@ -82,17 +112,27 @@ static void handle_process_loan(int client_socket, int employeeId) {
                 write_string(client_socket, "Loan approved, but customer account not found!\n");
             } else {
                 int fd_acct = open(ACCOUNT_FILE, O_RDWR);
-                set_record_lock(fd_acct, account_rec_num, sizeof(Account), F_WRLCK);
-                Account account;
-                lseek(fd_acct, account_rec_num * sizeof(Account), SEEK_SET);
-                read(fd_acct, &account, sizeof(Account));
-                account.balance += loan.amount;
-                lseek(fd_acct, account_rec_num * sizeof(Account), SEEK_SET);
-                write(fd_acct, &account, sizeof(Account));
-                set_record_lock(fd_acct, account_rec_num, sizeof(Account), F_UNLCK);
-                close(fd_acct);
-                log_transaction(account.accountId, account.ownerUserId, DEPOSIT, loan.amount, account.balance, "LOAN_CREDIT");
-                write_string(client_socket, "Loan approved. Amount credited to customer account.\n");
+                if(fd_acct == -1) { write_string(client_socket, "Error opening account file.\n"); }
+                else {
+                    set_record_lock(fd_acct, account_rec_num, sizeof(Account), F_WRLCK);
+                    Account account;
+                    lseek(fd_acct, account_rec_num * sizeof(Account), SEEK_SET);
+                    
+                    if (read(fd_acct, &account, sizeof(Account)) == sizeof(Account)) {
+                        account.balance += loan.amount;
+                        lseek(fd_acct, account_rec_num * sizeof(Account), SEEK_SET);
+                        if(write(fd_acct, &account, sizeof(Account)) == sizeof(Account)) {
+                            log_transaction(account.accountId, account.ownerUserId, DEPOSIT, loan.amount, account.balance, "LOAN_CREDIT");
+                            write_string(client_socket, "Loan approved. Amount credited to customer account.\n");
+                        } else {
+                            write_string(STDOUT_FILENO, "FATAL: Failed to write loan deposit.\n");
+                        }
+                    } else {
+                        write_string(client_socket, "Error reading customer account.\n");
+                    }
+                    set_record_lock(fd_acct, account_rec_num, sizeof(Account), F_UNLCK);
+                    close(fd_acct);
+                }
             }
         } else if (choice == 2) {
             loan.status = REJECTED;
@@ -101,7 +141,9 @@ static void handle_process_loan(int client_socket, int employeeId) {
             write_string(client_socket, "Invalid choice. No action taken.\n");
         }
         lseek(fd, rec_num * sizeof(Loan), SEEK_SET);
-        write(fd, &loan, sizeof(Loan));
+        if(write(fd, &loan, sizeof(Loan)) != sizeof(Loan)) {
+            write_string(STDOUT_FILENO, "FATAL: Failed to write loan status.\n");
+        }
     }
     set_record_lock(fd, rec_num, sizeof(Loan), F_UNLCK);
     close(fd);
@@ -160,9 +202,21 @@ void employee_menu(int client_socket, User user) {
         write_string(client_socket, "6. View My Personal Details\n");
         write_string(client_socket, "7. Change My Password\n");
         write_string(client_socket, "8. Logout\n");
+        write_string(client_socket, "+---------------------------------------+\n");
         write_string(client_socket, "Enter your choice: ");
 
-        read_client_input(client_socket, buffer, MAX_BUFFER);
+        // --- FIX: Check for disconnect or empty input ---
+        int read_status = read_client_input(client_socket, buffer, MAX_BUFFER);
+        if (read_status <= 0) {
+            write_string(STDOUT_FILENO, "Client disconnected.\n");
+            return; // Exit menu
+        }
+        if (my_strcmp(buffer, "") == 0) {
+            write_string(client_socket, "Invalid choice. Please enter a number.\n");
+            continue; // Re-show menu
+        }
+        // --- END FIX ---
+
         int choice = atoi(buffer);
         switch(choice) {
             case 1: handle_add_user(client_socket, CUSTOMER); break;
