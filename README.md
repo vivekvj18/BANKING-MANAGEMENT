@@ -124,7 +124,6 @@ BankingManagementSystem/
 │   ├── shared.c
 │   └── utils.c            # Generic helper functions
 ├── .gitignore
-├── Makefile               # For automating compilation
 ├── client                 # Compiled Executable
 ├── init_data              # Compiled Executable
 ├── server                 # Compiled Executable
