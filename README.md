@@ -1,200 +1,158 @@
 # 🏦 Banking Management System (C)
 
-![Language](https://img.shields.io/badge/Language-C-blue.svg) 
-![Build](https://img.shields.io/badge/Build-gcc-lightgrey.svg) 
-![Concurrency](https://img.shields.io/badge/Concurrency-pthreads-blue.svg)
+![Language](https://img.shields.io/badge/Language-C-blue.svg) ![Build](https://img.shields.io/badge/Build-gcc-lightgrey.svg) ![Concurrency](https://img.shields.io/badge/Concurrency-pthreads-blue.svg)
 
-A **multi-threaded, socket-based Banking Management System** built in C.  
-This project simulates a real-world banking environment using a **professional 3-tier modular architecture** ensuring clean separation of concerns and maintainability.
+This is a multi-threaded, socket-based banking application built in C. It simulates a real-world banking environment using a **professional 3-tier modular architecture** to ensure a clean separation of concerns.
 
----
-
-## 🧩 Core Highlights
-
-- **🧱 Modular 3-Tier Design:** Network Layer (`server.c`), Logic Layer (`controller.c`, `admin.c`, etc.), and Data Layer (`model.c`).
-- **🌐 Socket Programming:** Uses TCP/IP sockets to handle multiple clients concurrently.
-- **🧵 Multithreading:** Uses `pthreads` to handle each client in a separate thread.
-- **💾 Full ACID Compliance:** Ensures data integrity using file locks and a Write-Ahead Log (WAL).
-- **🔒 Concurrency Control:** Uses `fcntl` record locking and `pthread_mutex_t` for session synchronization.
-- **🧠 Robust Error Handling:** Validates inputs, formats, and checks return values of all system calls.
-- **🧾 Crash Recovery:** Built-in recovery mechanism for unfinished transactions using WAL.
+This project is a comprehensive demonstration of core system software concepts:
+* **Modular 3-Tier Design:** Code is separated into a Network Layer (`server.c`), Logic Layer (`controller.c`, `admin.c`, etc.), and Data Layer (`model.c`).
+* **Socket Programming:** Uses TCP/IP sockets to handle multiple clients concurrently.
+* **Multithreading:** Leverages `pthreads` to assign a separate thread for every client.
+* **Full ACID Compliance:** Guarantees data integrity through file locking and a write-ahead log.
+* **Concurrency Control:** Implements `fcntl` record locking to prevent race conditions and a `pthread_mutex_t` to protect the active session list.
+* **Write-Ahead Logging (WAL):** Ensures transaction **Atomicity** (even in a server crash) by logging all transfers to `transfer_log.dat` before committing them.
+* **Robust Error Handling:** Validates all user input (for length, format, and uniqueness) and checks the return values of all critical system calls (`read`, `write`).
 
 ---
 
 ## 🏛️ System Architecture
 
-This project follows a **3-tier separation of concerns** model:  
-Network → Controller → Data.
+This project follows a 3-tier "separation of concerns" model. The logic is separated into a Network layer, a routing/session layer, distinct role-based controllers, and a data-access layer.
 
-*(You can add your architecture diagram here, e.g., `![Architecture](blueprint.png)`)*
-  
-### Structure Overview
-- **`server.c` (Network Layer):**
-  - Handles socket creation, binding, listening, and accepting clients.
-  - Spawns a new `pthread` per client and passes control to controllers.
+*(This is the perfect place to insert the `blueprint.png` diagram you generated)*
 
-- **`controller.c` (Routing & Session Layer):**
-  - Handles login, validates user roles, and manages session list using mutex locks.
-  - Routes users to their respective role menus (`admin_menu`, `customer_menu`, etc.).
-
-- **Role Controllers (`admin.c`, `customer.c`, `employee.c`, `manager.c`):**
-  - Each role file handles its specific features and menu loops.
-
-- **`shared.c` (Shared Logic):**
-  - Contains cross-role features like `handle_add_user`, `handle_change_password`, and validation helpers.
-
-- **`model.c` (Data Access Layer):**
-  - Directly interacts with `.dat` files.
-  - Implements data access functions, WAL, and crash recovery routines.
-
-- **`utils.c` (Utility Layer):**
-  - Contains common I/O helpers and record-locking utilities.
+The code is organized as follows:
+* **`server.c` (Network Layer):**
+    * Its **single responsibility** is to `socket`, `bind`, `listen`, and `accept` new client connections.
+    * Spawns a new `pthread` for each client and passes control to the controller.
+* **`controller.c` (Routing & Session Layer):**
+    * Handles the initial login, validates the user's role, and manages active sessions using a mutex-locked array.
+    * Acts as a "router," sending the client to the correct menu (`admin_menu`, `customer_menu`, etc.).
+* **Role Controllers (`admin.c`, `customer.c`, etc.):**
+    * Each file is responsible for *one* user role.
+    * Contains the menu loop and all "handler" functions for that role (e.g., `customer.c` contains `handle_deposit`).
+* **`shared.c` (Shared Business Logic):**
+    * Contains handler functions used by *multiple* roles, such as `handle_add_user`, `handle_change_password`, and all input validation helpers (`get_valid_string`, `get_valid_email`).
+* **`model.c` (Data Access Layer):**
+    * The **only** layer that directly reads from or writes to the `.dat` files.
+    * Contains all data-access logic (`find_user_record`, `log_transaction`) and the **Atomicity/WAL functions** (`perform_recovery_check`, `write_transfer_log`).
+* **`utils.c` (Utility Layer):**
+    * Contains generic, reusable helper functions like `write_string`, `read_client_input`, and `set_record_lock`.
 
 ---
 
 ## 🛡️ Data Integrity & ACID Properties
 
-### **A - Atomicity**
-- Implemented in `handle_transfer_funds` using **Write-Ahead Logging (WAL)**.
-- Transaction flow:
-  1. Log `LOG_START`
-  2. Debit sender account
-  3. Credit receiver account
-  4. Log `LOG_COMMIT`
-- On crash recovery, unfinished transactions are rolled back automatically.
-
-### **C - Consistency**
-- Enforced before writing:
-  - Validates numeric inputs
-  - Prevents overdrafts (`amount > balance`)
-  - Ensures receiver account is active
-  - Maintains unique emails for new users
-
-### **I - Isolation**
-- Record-level file locking using `fcntl`.
-- Only specific account records are locked during operations.
-- Dual locking in transfers ensures isolation across concurrent threads.
-
-### **D - Durability**
-- All data persists using `write()` system calls.
-- Committed transactions and logs survive restarts.
+This project was built to meet strict requirements for data integrity.
+* **A - Atomicity (All or Nothing):**
+    * Implemented for `handle_transfer_funds` using a **Write-Ahead Log (WAL)**.
+    * **Flow:**
+        1. A `LOG_START` record is written to `transfer_log.dat`.
+        2. The debit is written to `accounts.dat`.
+        3. The credit is written to `accounts.dat`.
+        4. A `LOG_COMMIT` record is written to `transfer_log.dat`.
+    * **Recovery:** On startup, `perform_recovery_check()` reads the log. If it finds any `LOG_START` without a `LOG_COMMIT`, it **rolls back the transaction** by refunding the sender. This makes the transfer crash-proof.
+* **C - Consistency:**
+    * Enforced by application-level logic *before* any database write.
+    * `is_valid_amount()` prevents non-numeric input.
+    * `handle_withdraw` checks `if (amount > balance)`.
+    * `handle_transfer_funds` checks `if (!receiver_account.isActive)`.
+    * `handle_add_user` checks for unique email addresses.
+* **I - Isolation:**
+    * Implemented using `fcntl` **record-level locking**.
+    * When `handle_deposit` runs, it locks only the specific byte-range for that one account.
+    * `handle_transfer_funds` atomically locks *both* the sender's and receiver's records, forcing other threads to wait and preventing any interference.
+* **D - Durability:**
+    * All data is written to disk using the `write()` system call. All committed transactions (and the log itself) are persistent and will survive a server restart.
 
 ---
 
 ## 🚀 Features by Role
-
-| Role | Features |
-|------|-----------|
-| **Administrator** | Add/modify users, activate/deactivate accounts |
-| **Manager** | Assign loans, manage employees, handle customer feedback |
-| **Employee** | Add/edit customer accounts, process loans |
-| **Customer** | Deposit, withdraw, transfer funds atomically, view history, apply for loans |
-| **Shared** | Change password, view personal details |
-
----
-
-## 📁 Project Structure
-
-banking-system/
-├── include/ # Header files
-│ ├── admin.h
-│ ├── controller.h
-│ ├── customer.h
-│ ├── employee.h
-│ ├── manager.h
-│ ├── model.h
-│ ├── shared.h
-│ ├── utils.h
-│ └── constants.h
-│
-├── src/ # Source files
-│ ├── admin.c
-│ ├── admin_util.c
-│ ├── client.c
-│ ├── controller.c
-│ ├── customer.c
-│ ├── employee.c
-│ ├── manager.c
-│ ├── model.c
-│ ├── server.c
-│ ├── shared.c
-│ └── utils.c
-│
-├── data/ # Runtime data files
-│ ├── accounts.dat
-│ ├── users.dat
-│ ├── transfer_log.dat
-│ └── ...
-│
-├── obj/ # Compiled object files
-│ ├── admin.o
-│ ├── model.o
-│ └── ...
-│
-├── Makefile # Compilation script
-├── init_data # Admin utility executable
-├── server # Server executable
-└── client # Client executable
-
+* **Administrator (`admin.c`):**
+    * Add new users (Employee, Manager, Customer).
+    * Modify any user's details and role.
+    * Activate/Deactivate any user account.
+* **Manager (`manager.c`):**
+    * Assign pending loan applications to Employees.
+    * Review and resolve customer feedback.
+    * Activate/Deactivate Customer accounts.
+* **Employee (`employee.c`):**
+    * Add new Customer accounts.
+    * Modify Customer details (KYC).
+    * View assigned loans and Process them (Approve/Reject).
+* **Customer (`customer.c`):**
+    * View Balance, Deposit, and Withdraw funds.
+    * Transfer funds to other customers (Atomically).
+    * View detailed transaction history.
+    * Apply for loans and view their status.
+    * Submit feedback.
+* **Shared (`shared.c`):**
+    * All roles can view their personal details and change their password.
 
 ---
 
-## 🛠️ Compilation & Execution
+## 📁 Project Structure 🌲
 
-You can compile and run the entire project using the provided **Makefile**.
+BankingManagementSystem/
+├── data/
+│   ├── accounts.dat       # User account details
+│   ├── feedback.dat       # Customer feedback records
+│   ├── loans.dat          # Loan application records
+│   ├── transactions.dat   # Transaction history
+│   ├── transfer_log.dat   # Write-Ahead Log (WAL) for Atomicity
+│   └── users.dat          # User login and profile data
+├── include/               # Header files (.h) defining interfaces and structures
+│   ├── admin.h
+│   ├── common.h
+│   ├── controller.h
+│   ├── customer.h
+│   ├── employee.h
+│   ├── manager.h
+│   ├── model.h
+│   ├── shared.h
+│   └── utils.h
+├── obj/                   # Compiled object files (.o) - (Not tracked by Git)
+├── src/                   # Source files (.c) implementing the logic
+│   ├── admin.c
+│   ├── admin_util.c       # Utility to create initial users/accounts
+│   ├── client.c           # Client program
+│   ├── controller.c
+│   ├── customer.c
+│   ├── employee.c
+│   ├── manager.c
+│   ├── model.c            # Data storage and retrieval logic
+│   ├── server.c           # Main server logic (connection handling, threads)
+│   ├── shared.c
+│   └── utils.c            # Generic helper functions
+├── .gitignore
+├── Makefile               # For automating compilation
+├── client                 # Compiled Executable
+├── init_data              # Compiled Executable
+├── server                 # Compiled Executable
+└── UML DIAGRAM.pdf
 
-### **Makefile**
-```makefile
-# Makefile for Modular Banking System
+## 🚀 How to Compile and Run
 
-CC = gcc
-CFLAGS = -Wall -Wextra -Iinclude
-LDFLAGS = -lpthread
+### 1. Compilation
+Compile all modules and link them into three final executables.
 
-SRC_DIR = src
-OBJ_DIR = obj
-DATA_DIR = data
+# 1. Create directories
+mkdir -p obj data
 
-SERVER_SRCS = $(SRC_DIR)/utils.c \
-              $(SRC_DIR)/model.c \
-              $(SRC_DIR)/shared.c \
-              $(SRC_DIR)/customer.c \
-              $(SRC_DIR)/employee.c \
-              $(SRC_DIR)/manager.c \
-              $(SRC_DIR)/admin.c \
-              $(SRC_DIR)/controller.c \
-              $(SRC_DIR)/server.c
+# 2. Compile all .c files into .o files
+gcc -Iinclude -Wall -c src/utils.c -o obj/utils.o
+gcc -Iinclude -Wall -c src/model.c -o obj/model.o
+gcc -Iinclude -Wall -c src/shared.c -o obj/shared.o
+gcc -Iinclude -Wall -c src/customer.c -o obj/customer.o
+gcc -Iinclude -Wall -c src/employee.c -o obj/employee.o
+gcc -Iinclude -Wall -c src/manager.c -o obj/manager.o
+gcc -Iinclude -Wall -c src/admin.c -o obj/admin.o
+gcc -Iinclude -Wall -c src/controller.c -o obj/controller.o
+gcc -Iinclude -Wall -c src/server.c -o obj/server.o
+gcc -Iinclude -Wall -c src/client.c -o obj/client.o
+gcc -Iinclude -Wall -c src/admin_util.c -o obj/admin_util.o
 
-CLIENT_SRCS = $(SRC_DIR)/client.c $(SRC_DIR)/utils.c
-INIT_SRCS = $(SRC_DIR)/admin_util.c $(SRC_DIR)/model.c $(SRC_DIR)/utils.c
-
-SERVER_OBJS = $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SERVER_SRCS))
-CLIENT_OBJS = $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(CLIENT_SRCS))
-INIT_OBJS = $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(INIT_SRCS))
-
-SERVER_EXE = server
-CLIENT_EXE = client
-INIT_EXE = init_data
-
-all: setup $(SERVER_EXE) $(CLIENT_EXE) $(INIT_EXE)
-
-$(SERVER_EXE): $(SERVER_OBJS)
-	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
-
-$(CLIENT_EXE): $(CLIENT_OBJS)
-	$(CC) $(CFLAGS) $^ -o $@
-
-$(INIT_EXE): $(INIT_OBJS)
-	$(CC) $(CFLAGS) $^ -o $@
-
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-setup:
-	@mkdir -p $(OBJ_DIR)
-	@mkdir -p $(DATA_DIR)
-
-.PHONY: clean all setup
-clean:
-	rm -f $(OBJ_DIR)/*.o $(SERVER_EXE) $(CLIENT_EXE) $(INIT_EXE)
-	rm -rf $(DATA_DIR)
+# 3. Link the executables
+gcc obj/admin_util.o obj/model.o obj/utils.o -o init_data
+gcc obj/server.o obj/controller.o obj/admin.o obj/manager.o obj/employee.o obj/customer.o obj/shared.o obj/model.o obj/utils.o -o server -lpthread
+gcc obj/client.o obj/utils.o -o cliente system).
