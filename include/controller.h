@@ -4,7 +4,7 @@
 
 #include "common.h"
 
-// --- Main Client Handler ---
+// --- Main Client Handler (The "Router") ---
 void* handle_client(void* client_socket_ptr);
 
 #endif // CONTROLLER_H

@@ -1,5 +1,7 @@
 // src/admin_util.c
 #include "common.h"
+#include "utils.h"  // Include utils for write_string
+#include "model.h"  // Include model for file paths
 
 int main() {
     int fd_user, fd_account;
@@ -23,10 +25,10 @@ int main() {
     admin1.isActive = 1;
     strcpy(admin1.password, "admin123"); 
     strcpy(admin1.firstName, "Admin");
-    strcpy(admin1.lastName, "User");
-    strcpy(admin1.phone, "9876543210");
-    strcpy(admin1.email, "admin@bank.com");
-    strcpy(admin1.address, "1 Bank Road, Bangalore");
+    strcpy(admin1.lastName, "One");
+    strcpy(admin1.phone, "1111111111");
+    strcpy(admin1.email, "admin1@bank.com");
+    strcpy(admin1.address, "1 Admin Road");
     write(fd_user, &admin1, sizeof(User));
     write_string(STDOUT_FILENO, "Admin user 1 created (ID: 1, Pass: admin123)\n");
 
@@ -36,11 +38,11 @@ int main() {
     customer1.role = CUSTOMER;
     customer1.isActive = 1;
     strcpy(customer1.password, "cust123");
-    strcpy(customer1.firstName, "Ravi");
-    strcpy(customer1.lastName, "Kumar");
-    strcpy(customer1.phone, "8888888888");
-    strcpy(customer1.email, "ravi@gmail.com");
-    strcpy(customer1.address, "123 MG Road, Bangalore");
+    strcpy(customer1.firstName, "Customer");
+    strcpy(customer1.lastName, "One");
+    strcpy(customer1.phone, "2222222222");
+    strcpy(customer1.email, "cust1@gmail.com");
+    strcpy(customer1.address, "1 Customer Road");
     write(fd_user, &customer1, sizeof(User));
     write_string(STDOUT_FILENO, "Customer user 1 created (ID: 2, Pass: cust123)\n");
     
@@ -50,11 +52,11 @@ int main() {
     employee1.role = EMPLOYEE;
     employee1.isActive = 1;
     strcpy(employee1.password, "emp123");
-    strcpy(employee1.firstName, "Priya");
-    strcpy(employee1.lastName, "Sharma");
-    strcpy(employee1.phone, "7777777777");
-    strcpy(employee1.email, "priya@bank.com");
-    strcpy(employee1.address, "456 Indiranagar, Bangalore");
+    strcpy(employee1.firstName, "Employee");
+    strcpy(employee1.lastName, "One");
+    strcpy(employee1.phone, "3333333333");
+    strcpy(employee1.email, "emp1@bank.com");
+    strcpy(employee1.address, "1 Employee Road");
     write(fd_user, &employee1, sizeof(User));
     write_string(STDOUT_FILENO, "Employee user 1 created (ID: 3, Pass: emp123)\n");
 
@@ -64,11 +66,11 @@ int main() {
     manager1.role = MANAGER;
     manager1.isActive = 1;
     strcpy(manager1.password, "man123");
-    strcpy(manager1.firstName, "Vikram");
-    strcpy(manager1.lastName, "Singh");
-    strcpy(manager1.phone, "6666666666");
-    strcpy(manager1.email, "vikram@bank.com");
-    strcpy(manager1.address, "789 Koramangala, Bangalore");
+    strcpy(manager1.firstName, "Manager");
+    strcpy(manager1.lastName, "One");
+    strcpy(manager1.phone, "4444444444");
+    strcpy(manager1.email, "man1@bank.com");
+    strcpy(manager1.address, "1 Manager Road");
     write(fd_user, &manager1, sizeof(User));
     write_string(STDOUT_FILENO, "Manager user 1 created (ID: 4, Pass: man123)\n");
 
@@ -78,11 +80,11 @@ int main() {
     admin2.role = ADMINISTRATOR;
     admin2.isActive = 1;
     strcpy(admin2.password, "admin456"); 
-    strcpy(admin2.firstName, "Sonia");
-    strcpy(admin2.lastName, "Rao");
-    strcpy(admin2.phone, "9876543211");
-    strcpy(admin2.email, "sonia@bank.com");
-    strcpy(admin2.address, "2 Bank Road, Bangalore");
+    strcpy(admin2.firstName, "Admin");
+    strcpy(admin2.lastName, "Two");
+    strcpy(admin2.phone, "5555555555");
+    strcpy(admin2.email, "admin2@bank.com");
+    strcpy(admin2.address, "2 Admin Road");
     write(fd_user, &admin2, sizeof(User));
     write_string(STDOUT_FILENO, "Admin user 2 created (ID: 5, Pass: admin456)\n");
 
@@ -92,11 +94,11 @@ int main() {
     customer2.role = CUSTOMER;
     customer2.isActive = 1;
     strcpy(customer2.password, "cust456");
-    strcpy(customer2.firstName, "Amit");
-    strcpy(customer2.lastName, "Verma");
-    strcpy(customer2.phone, "8888888889");
-    strcpy(customer2.email, "amit@gmail.com");
-    strcpy(customer2.address, "124 MG Road, Bangalore");
+    strcpy(customer2.firstName, "Customer");
+    strcpy(customer2.lastName, "Two");
+    strcpy(customer2.phone, "6666666666");
+    strcpy(customer2.email, "cust2@gmail.com");
+    strcpy(customer2.address, "2 Customer Road");
     write(fd_user, &customer2, sizeof(User));
     write_string(STDOUT_FILENO, "Customer user 2 created (ID: 6, Pass: cust456)\n");
     
@@ -106,11 +108,11 @@ int main() {
     employee2.role = EMPLOYEE;
     employee2.isActive = 1;
     strcpy(employee2.password, "emp456");
-    strcpy(employee2.firstName, "Rahul");
-    strcpy(employee2.lastName, "Desai");
-    strcpy(employee2.phone, "7777777778");
-    strcpy(employee2.email, "rahul@bank.com");
-    strcpy(employee2.address, "457 Indiranagar, Bangalore");
+    strcpy(employee2.firstName, "Employee");
+    strcpy(employee2.lastName, "Two");
+    strcpy(employee2.phone, "7777777777");
+    strcpy(employee2.email, "emp2@bank.com");
+    strcpy(employee2.address, "2 Employee Road");
     write(fd_user, &employee2, sizeof(User));
     write_string(STDOUT_FILENO, "Employee user 2 created (ID: 7, Pass: emp456)\n");
 
@@ -120,11 +122,11 @@ int main() {
     manager2.role = MANAGER;
     manager2.isActive = 1;
     strcpy(manager2.password, "man456");
-    strcpy(manager2.firstName, "Anjali");
-    strcpy(manager2.lastName, "Mehta");
-    strcpy(manager2.phone, "6666666667");
-    strcpy(manager2.email, "anjali@bank.com");
-    strcpy(manager2.address, "790 Koramangala, Bangalore");
+    strcpy(manager2.firstName, "Manager");
+    strcpy(manager2.lastName, "Two");
+    strcpy(manager2.phone, "8888888888");
+    strcpy(manager2.email, "man2@bank.com");
+    strcpy(manager2.address, "2 Manager Road");
     write(fd_user, &manager2, sizeof(User));
     write_string(STDOUT_FILENO, "Manager user 2 created (ID: 8, Pass: man456)\n");
     
